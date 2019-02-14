@@ -1,7 +1,7 @@
 import numpy as np
 import pickle
 
-
+# PREFILLED
 def xavier_init(size, gain=1.0):
     """
     Xavier initialization of network weights.
@@ -10,7 +10,7 @@ def xavier_init(size, gain=1.0):
     high = gain * np.sqrt(6.0 / np.sum(size))
     return np.random.uniform(low=low, high=high, size=size)
 
-
+# PREFILLED
 class Layer:
     """
     Abstract layer class.
@@ -31,7 +31,7 @@ class Layer:
     def update_params(self, *args, **kwargs):
         pass
 
-
+# PREFILLED
 class MSELossLayer(Layer):
     """
     MSELossLayer: Computes mean-squared error between y_pred and y_target.
@@ -55,7 +55,7 @@ class MSELossLayer(Layer):
     def backward(self):
         return self._mse_grad(*self._cache_current)
 
-
+# PREFILLED
 class CrossEntropyLossLayer(Layer):
     """
     CrossEntropyLossLayer: Computes the softmax followed by the negative log-
@@ -85,7 +85,7 @@ class CrossEntropyLossLayer(Layer):
         n_obs = len(y_target)
         return -1 / n_obs * (y_target - probs)
 
-
+# DONE
 class SigmoidLayer(Layer):
     """
     SigmoidLayer: Applies sigmoid function elementwise.
@@ -98,8 +98,7 @@ class SigmoidLayer(Layer):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-        pass
-
+        return self.sigmoid(x)
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -108,13 +107,16 @@ class SigmoidLayer(Layer):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-        pass
-
+        return self.sigmoid(grad_z) * (1 - self.sigmoid(grad_z))
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
 
+    @staticmethod
+    def sigmoid(x):
+        return 1/(1 + np.exp(-x))
 
+# DONE
 class ReluLayer(Layer):
     """
     ReluLayer: Applies Relu function elementwise.
@@ -122,13 +124,14 @@ class ReluLayer(Layer):
 
     def __init__(self):
         self._cache_current = None
+        self.one = np.array(1)
+        self.zero = np.array(0)
 
     def forward(self, x):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-        pass
-
+        return np.max(0, x)
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -137,13 +140,12 @@ class ReluLayer(Layer):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-        pass
-
+        return self.one if grad_z > 0 else self.zero
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
 
-
+# TODO: complete backward()
 class LinearLayer(Layer):
     """
     LinearLayer: Performs affine transformation of input.
@@ -162,8 +164,9 @@ class LinearLayer(Layer):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-        self._W = None
-        self._b = None
+        size = self.n_in * self.n_out
+        self._W = xavier_init(size).reshape(self.n_in, self.n_out)
+        self._b = xavier_init(self.n_out)
 
         self._cache_current = None
         self._grad_W_current = None
@@ -189,7 +192,9 @@ class LinearLayer(Layer):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-
+        x = np.matmul(x, self._W)
+        x += self._b
+        return x
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -232,7 +237,7 @@ class LinearLayer(Layer):
         #                       ** END OF YOUR CODE **
         #######################################################################
 
-
+# TODO: complete backward(), update_params()
 class MultiLayerNetwork(object):
     """
     MultiLayerNetwork: A network consisting of stacked linear layers and
@@ -252,11 +257,17 @@ class MultiLayerNetwork(object):
         self.input_dim = input_dim
         self.neurons = neurons
         self.activations = activations
+        self._layers = []
 
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-        self._layers = None
+
+        # setup the layers of the network.
+        for i in range(1, len(self.neurons)):
+            previous, current = i-1, i
+            self._layers.append(LinearLayer(previous, current))
+
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -276,6 +287,13 @@ class MultiLayerNetwork(object):
         #                       ** START OF YOUR CODE **
         #######################################################################
 
+        for i in range(len(self._layers)):
+            layer = self._layers[i]
+            activation = self.activations[i]
+            x = layer.forward(x)
+            x = activation(x)
+        return x
+        
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -319,7 +337,7 @@ class MultiLayerNetwork(object):
         #                       ** END OF YOUR CODE **
         #######################################################################
 
-
+# PREFILLED
 def save_network(network, fpath):
     """
     Utility function to pickle `network` at file path `fpath`.
@@ -327,7 +345,7 @@ def save_network(network, fpath):
     with open(fpath, "wb") as f:
         pickle.dump(network, f)
 
-
+# PREFILLED
 def load_network(fpath):
     """
     Utility function to load network found at file path `fpath`.
@@ -336,7 +354,7 @@ def load_network(fpath):
         network = pickle.load(f)
     return network
 
-
+# TODO: complete shuffle(), train(), eval_loss()
 class Trainer(object):
     """
     Trainer: Object that manages the training of a neural network.
@@ -445,7 +463,7 @@ class Trainer(object):
         #                       ** END OF YOUR CODE **
         #######################################################################
 
-
+# TODO: complete init(), apply(), revert()
 class Preprocessor(object):
     """
     Preprocessor: Object used to apply "preprocessing" operation to datasets.
@@ -505,7 +523,7 @@ class Preprocessor(object):
         #                       ** END OF YOUR CODE **
         #######################################################################
 
-
+# PREFILLED
 def example_main():
     input_dim = 4
     neurons = [16, 3]
@@ -548,6 +566,7 @@ def example_main():
     accuracy = (preds == targets).mean()
     print("Validation accuracy: {}".format(accuracy))
 
+# ---------------------
 
 if __name__ == "__main__":
     example_main()
