@@ -124,14 +124,12 @@ class ReluLayer(Layer):
 
     def __init__(self):
         self._cache_current = None
-        self.one = np.array(1)
-        self.zero = np.array(0)
 
     def forward(self, x):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-        return np.max(0, x)
+        return np.maximum(0.0, x)
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -140,12 +138,14 @@ class ReluLayer(Layer):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-        return self.one if grad_z > 0 else self.zero
+        grad_z[grad_z >= 0] = 1.0
+        grad_z[grad_z <  0] = 0.0
+        return grad_z
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
 
-# TODO: complete backward()
+# DONE
 class LinearLayer(Layer):
     """
     LinearLayer: Performs affine transformation of input.
@@ -168,7 +168,7 @@ class LinearLayer(Layer):
         self._W = xavier_init(size).reshape(self.n_in, self.n_out)
         self._b = xavier_init(self.n_out)
 
-        self._cache_current = None
+        self._cache_current  = {'x': None}
         self._grad_W_current = None
         self._grad_b_current = None
 
@@ -192,9 +192,10 @@ class LinearLayer(Layer):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-        x = np.matmul(x, self._W)
-        x += self._b
-        return x
+        self._cache_current['x'] = x
+        # print(x)
+        # print(x.shape, self._W.shape, self._b.shape)
+        return np.dot(x, self._W) + self._b
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -216,7 +217,24 @@ class LinearLayer(Layer):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
+        # get batch size
+        batch = grad_z.shape[0]
 
+        # Load forward propagation results
+        x = self._cache_current['x']
+        
+        # calculate loss derivative with respect to weights
+        dW = np.dot(x.T, grad_z) - self._W
+        dW /= batch
+        self._grad_W_current = dW
+
+        # Calculate loss derivative with respect to bias
+        db = np.mean(grad_z)
+        self._grad_b_current = db
+
+        # Calculate loss derivative with respect to input
+        dx = np.dot(grad_z, dW.T)
+        return dx
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -232,12 +250,14 @@ class LinearLayer(Layer):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-
+        self._b -= learning_rate * self._grad_b_current        
+        self._W -= learning_rate * \
+            np.array([np.mean(self._grad_W_current, axis=1)]).T
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
 
-# TODO: complete backward(), update_params()
+# DONE (Needs testing)
 class MultiLayerNetwork(object):
     """
     MultiLayerNetwork: A network consisting of stacked linear layers and
@@ -258,16 +278,26 @@ class MultiLayerNetwork(object):
         self.neurons = neurons
         self.activations = activations
         self._layers = []
+        self._activations = []
 
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
 
+        # add the input layer
+        self._layers.append(LinearLayer(self.input_dim, self.neurons[0]))
         # setup the layers of the network.
         for i in range(1, len(self.neurons)):
-            previous, current = i-1, i
+            previous, current = self.neurons[i-1], self.neurons[i]
             self._layers.append(LinearLayer(previous, current))
-
+        # add the activations
+        for i in self.activations:
+            if i == "relu":
+                self._activations.append(ReluLayer())
+            if i == "sigmoid":
+                self._activations.append(SigmoidLayer())
+            if i == "identity":
+                self._activations.append(None)
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -289,9 +319,10 @@ class MultiLayerNetwork(object):
 
         for i in range(len(self._layers)):
             layer = self._layers[i]
-            activation = self.activations[i]
+            activation = self._activations[i]
             x = layer.forward(x)
-            x = activation(x)
+            if activation is not None:
+                x = activation(x)
         return x
         
         #######################################################################
@@ -316,7 +347,13 @@ class MultiLayerNetwork(object):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-
+        gradient = grad_z
+        for i in range(len(self._layers)-1,-1,-1):
+            activation = self._activations[i]
+            if activation is not None:
+                gradient = activation.backward(gradient)
+            gradient = self._layers[i].backward(gradient)
+        return gradient
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -332,7 +369,8 @@ class MultiLayerNetwork(object):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-
+        for layer in self._layers:
+            layer.update_params(learning_rate)
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -392,6 +430,11 @@ class Trainer(object):
         #                       ** START OF YOUR CODE **
         #######################################################################
         self._loss_layer = None
+        self.lossFunction = None
+        if self.loss_fun == "cross_entropy":
+            self.lossFunction = CrossEntropyLossLayer()
+        elif self.loss_fun == "MSE":
+            self.lossFunction = MSELossLayer()
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -412,7 +455,13 @@ class Trainer(object):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
+        index = np.argsort(input_dataset)
+        index = np.random.shuffle(index)
 
+        shuffled_inputs  =  input_dataset[index][0]
+        shuffled_targets = target_dataset[index][0]
+
+        return (shuffled_inputs, shuffled_targets)
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -440,7 +489,35 @@ class Trainer(object):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
+        for i in range(self.nb_epoch):
+            # setup loss function
+            loss = 0
+            # shuffle the dataset if needed.
+            inputs, targets = input_dataset.copy(), target_dataset.copy()
 
+            if self.shuffle_flag:
+                inputs, targets = self.shuffle(inputs, targets)
+            # split the dataset into batches.
+            inputShape = inputs.shape[0]
+            # print(inputs.shape)
+            for j in range(0, inputShape, self.batch_size):
+                X =  inputs[j:min(j+self.batch_size, inputShape), :]
+                y = targets[j:min(j+self.batch_size, inputShape), :]
+                # print("X:",X.shape, "y:",y.shape)
+                # print("training network - line 491")
+                # train the network
+                guess = self.network(X)
+                # check the loss
+                # print("boss:",guess.shape,y.shape, loss)
+                loss += self.lossFunction(y, guess)
+                # get the loss derivative
+                dLoss = self.lossFunction.backward()
+                # backpropagate
+                self.network.backward(dLoss)
+                # update the weights.
+                self.network.update_params(self.learning_rate)
+            print("Epoch [{}/{}]: Loss:{}".format(i+1,self.nb_epoch,loss))
+        print()
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -458,7 +535,8 @@ class Trainer(object):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-
+        guess = self.network(input_dataset)
+        return self.lossFunction(target_dataset, guess)
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -482,7 +560,7 @@ class Preprocessor(object):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-
+        self.data = data
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -500,7 +578,11 @@ class Preprocessor(object):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-
+        return data
+        # norm=np.linalg.norm(data, ord=1)
+        # if norm==0:
+        #     norm=np.finfo(data.dtype).eps
+        # return data/norm
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -518,7 +600,7 @@ class Preprocessor(object):
         #######################################################################
         #                       ** START OF YOUR CODE **
         #######################################################################
-
+        return self.data
         #######################################################################
         #                       ** END OF YOUR CODE **
         #######################################################################
@@ -527,7 +609,7 @@ class Preprocessor(object):
 def example_main():
     input_dim = 4
     neurons = [16, 3]
-    activations = ["relu", "identity"]
+    activations = ["relu", "sigmoid"]
     net = MultiLayerNetwork(input_dim, neurons, activations)
 
     dat = np.loadtxt("iris.dat")
@@ -568,5 +650,30 @@ def example_main():
 
 # ---------------------
 
+def testMe():
+    lr = 0.001
+    lossFunction = MSELossLayer()
+    model = LinearLayer(7,1)
+    relu = ReluLayer()
+    x = np.array([[1,2,3,4,5,6,7], [1,2,3,4,5,6,7], [1,2,3,4,5,6,7]])
+    y = np.array([1,1,1])
+    for _ in range(0,100):
+        # print("X:\n", x)
+        # print("y:\n", y)
+        guess = model.forward(x)
+        # print("ok")
+        guess = relu(guess)
+        # print("Guess:\n",guess)
+        loss = lossFunction(guess, y)
+        # print(loss)
+        # print("Loss:\n", loss)
+        dLoss = lossFunction.backward()
+        # print("DLoss:\n", dLoss)
+        dloss = relu.backward(dLoss)
+
+        model.backward(dLoss)
+        model.update_params(lr)
+    # print()
 if __name__ == "__main__":
     example_main()
+    # testMe()
