@@ -22,7 +22,7 @@ def main():
     #######################################################################
     trainRatio = 0.8
     testRatio  = 0.1
-    numEpochs  = 50
+    numEpochs  = 500
     batchsize  = 72
 
     dataX, dataY = dataset[:, 0:3], dataset[:, 3:6]
@@ -80,6 +80,8 @@ def main():
         model.train()
         # print(trainloader)
         for data, target in trainloader:
+            data = data.to(device)
+            target = target.to(device)
             optimizer.zero_grad()
             output = model(data)
             loss = loss_function(output, target)
@@ -91,6 +93,8 @@ def main():
         model.eval()
 
         for data, target in validloader:
+            data = data.to(device)
+            target = target.to(device)
             output = model(data)
             loss = loss_function(output, target)
             valid_loss.append(loss.item())
